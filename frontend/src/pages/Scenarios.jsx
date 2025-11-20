@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from 'react-query';
 import { getScenarios, compareScenarios, getProducts, simulateScenario } from '../services/api';
-import { Play, GitCompare, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { Play, GitCompare, TrendingUp, TrendingDown, DollarSign, Zap, Check, AlertCircle } from 'lucide-react';
 
 function Scenarios() {
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -37,14 +37,16 @@ function Scenarios() {
 
     setSimulating(true);
     try {
+      const selectedProd = products.find(p => p.id === parseInt(selectedProduct));
       await simulateScenario({
         product_id: parseInt(selectedProduct),
         new_price: parseFloat(newPrice),
         simulation_days: simulationDays
       });
       await refetch();
+      setSelectedProduct('');
       setNewPrice('');
-      alert('Scenario simulated successfully!');
+      alert('Scenario created successfully!');
     } catch (error) {
       alert('Simulation failed: ' + error.response?.data?.error);
     } finally {
@@ -58,22 +60,34 @@ function Scenarios() {
     );
   };
 
+  const getRecommendationColor = (action) => {
+    if (action === 'Highly Recommended') return 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300';
+    if (action === 'Recommended') return 'bg-blue-500/20 border-blue-500/30 text-blue-300';
+    if (action === 'Consider') return 'bg-amber-500/20 border-amber-500/30 text-amber-300';
+    return 'bg-red-500/20 border-red-500/30 text-red-300';
+  };
+
+  const selectedProduct_obj = products.find(p => p.id === parseInt(selectedProduct));
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div>
-  <h1 className="text-3xl font-bold text-slate-900 dark:text-white">What-If Scenarios</h1>
-  <p className="text-slate-400 mt-1">Simulate and compare pricing strategies</p>
+        <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">What-If Scenarios</h1>
+        <p className="text-slate-400 text-lg">Simulate pricing strategies and compare outcomes</p>
       </div>
 
       {/* Scenario Creator */}
       <div className="card">
-  <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Create New Scenario</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Select Product
-            </label>
+        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <Zap className="h-5 w-5 text-violet-400" />
+          Create New Scenario
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Product Selection */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-300 mb-3">Select Product</label>
             <select
               value={selectedProduct}
               onChange={(e) => setSelectedProduct(e.target.value)}
@@ -87,10 +101,10 @@ function Scenarios() {
               ))}
             </select>
           </div>
+
+          {/* New Price */}
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              New Price ($)
-            </label>
+            <label className="block text-sm font-semibold text-slate-300 mb-3">New Price ($)</label>
             <input
               type="number"
               value={newPrice}
@@ -101,10 +115,10 @@ function Scenarios() {
               className="input w-full"
             />
           </div>
+
+          {/* Duration */}
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Duration (days)
-            </label>
+            <label className="block text-sm font-semibold text-slate-300 mb-3">Duration (days)</label>
             <select
               value={simulationDays}
               onChange={(e) => setSimulationDays(Number(e.target.value))}
@@ -116,73 +130,123 @@ function Scenarios() {
               <option value={90}>90 days</option>
             </select>
           </div>
+
+          {/* Run Button */}
+          <div className="flex items-end">
+            <button
+              onClick={handleSimulate}
+              disabled={simulating || !selectedProduct || !newPrice}
+              className="btn btn-primary w-full flex items-center justify-center gap-2"
+            >
+              <Play className="h-4 w-4" />
+              {simulating ? 'Running...' : 'Run Simulation'}
+            </button>
+          </div>
         </div>
-        <button
-          onClick={handleSimulate}
-          disabled={simulating || !selectedProduct || !newPrice}
-          className="btn btn-primary mt-4 flex items-center gap-2"
-        >
-          <Play className="h-4 w-4" />
-          {simulating ? 'Simulating...' : 'Run Simulation'}
-        </button>
+
+        {/* Price Preview */}
+        {selectedProduct_obj && newPrice && (
+          <div className="mt-4 pt-4 border-t border-white/10 bg-white/5 rounded-lg p-3">
+            <p className="text-sm text-slate-400 mb-2">Price change preview:</p>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-300">{selectedProduct_obj.name}</span>
+              <div className="flex items-center gap-3 text-lg font-bold">
+                <span className="text-slate-400">${selectedProduct_obj.current_price}</span>
+                <TrendingUp className="h-5 w-5 text-violet-400" />
+                <span className="text-violet-400">${newPrice}</span>
+                <span className="text-sm text-slate-400">
+                  ({(((parseFloat(newPrice) - selectedProduct_obj.current_price) / selectedProduct_obj.current_price) * 100).toFixed(1)}%)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Scenario Comparison */}
+      {/* Comparison Results */}
       {selectedScenarios.length >= 2 && comparison && (
-        <div className="card bg-blue-50 dark:bg-slate-800">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Comparison Summary</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-lg">
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Best for Revenue</p>
-              <p className="font-semibold text-slate-900 dark:text-blue-400">{comparison.best_for_revenue?.name}</p>
-              <p className="text-lg font-bold text-green-600 dark:text-green-400 mt-1">
+        <div className="card border-l-4 border-l-violet-500">
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <GitCompare className="h-5 w-5 text-violet-400" />
+            Comparison Results ({selectedScenarios.length} scenarios)
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Best for Revenue */}
+            <div className="card bg-gradient-to-br from-emerald-600/20 to-emerald-400/5 border border-emerald-500/30">
+              <div className="flex items-center gap-2 mb-3">
+                <DollarSign className="h-5 w-5 text-emerald-400" />
+                <h3 className="font-bold text-white">Best Revenue</h3>
+              </div>
+              <p className="text-sm text-slate-300 mb-2">{comparison.best_for_revenue?.name}</p>
+              <div className="text-2xl font-bold text-emerald-400">
                 +{comparison.best_for_revenue?.revenue?.revenue_change_percent.toFixed(1)}%
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                ${comparison.best_for_revenue?.revenue?.total_revenue_change.toLocaleString()}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg">
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Best for Profit</p>
-              <p className="font-semibold text-slate-900 dark:text-blue-400">{comparison.best_for_profit?.name}</p>
-              <p className="text-lg font-bold text-green-600 dark:text-green-400 mt-1">
+
+            {/* Best for Profit */}
+            <div className="card bg-gradient-to-br from-violet-600/20 to-violet-400/5 border border-violet-500/30">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="h-5 w-5 text-violet-400" />
+                <h3 className="font-bold text-white">Best Profit</h3>
+              </div>
+              <p className="text-sm text-slate-300 mb-2">{comparison.best_for_profit?.name}</p>
+              <div className="text-2xl font-bold text-violet-400">
                 +{comparison.best_for_profit?.profit?.profit_change_percent.toFixed(1)}%
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                ${comparison.best_for_profit?.profit?.total_profit_change.toLocaleString()}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg">
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Best for Volume</p>
-              <p className="font-semibold text-slate-900">{comparison.best_for_volume?.name}</p>
-              <p className="text-lg font-bold text-blue-600 mt-1">
+
+            {/* Best for Volume */}
+            <div className="card bg-gradient-to-br from-blue-600/20 to-blue-400/5 border border-blue-500/30">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingDown className="h-5 w-5 text-blue-400" />
+                <h3 className="font-bold text-white">Best Volume</h3>
+              </div>
+              <p className="text-sm text-slate-300 mb-2">{comparison.best_for_volume?.name}</p>
+              <div className="text-2xl font-bold text-blue-400">
                 +{comparison.best_for_volume?.demand?.quantity_change_percent.toFixed(1)}%
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Demand increase
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Scenarios List */}
+      {/* Scenarios Table */}
       <div className="card">
-        <div className="flex justify-between items-center mb-4">
-  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Recent Scenarios</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-6 border-b border-white/10">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <GitCompare className="h-5 w-5 text-violet-400" />
+            Recent Scenarios
+          </h2>
+          
           {selectedScenarios.length >= 2 && (
-            <button
-              className="btn btn-secondary flex items-center gap-2"
-            >
-              <GitCompare className="h-4 w-4" />
-              Comparing {selectedScenarios.length} scenarios
-            </button>
+            <div className="badge badge-info">
+              {selectedScenarios.length} selected for comparison
+            </div>
           )}
         </div>
 
         {scenarios.length === 0 ? (
-          <div className="text-center py-12 text-slate-600 dark:text-slate-400">
-            <Play className="h-12 w-12 mx-auto mb-4 text-slate-600 dark:text-slate-400" />
-            <p>No scenarios yet</p>
-            <p className="text-sm mt-2">Create your first what-if scenario above</p>
+          <div className="text-center py-16">
+            <AlertCircle className="h-12 w-12 text-slate-600 mx-auto mb-4" />
+            <p className="text-slate-300 text-lg mb-1">No scenarios yet</p>
+            <p className="text-slate-500">Create your first what-if scenario above</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
+            <table className="w-full text-sm">
+              <thead className="bg-gradient-to-r from-violet-600/20 to-blue-600/20 border-b border-white/10">
                 <tr>
-                  <th className="w-12">
+                  <th className="px-4 py-4 text-left font-semibold text-violet-300 uppercase tracking-wider">
                     <input
                       type="checkbox"
                       onChange={(e) => {
@@ -196,22 +260,22 @@ function Scenarios() {
                       className="rounded"
                     />
                   </th>
-                  <th>Scenario</th>
-                  <th>Product</th>
-                  <th className="text-right">Price Change</th>
-                  <th className="text-right">Revenue Impact</th>
-                  <th className="text-right">Profit Impact</th>
-                  <th className="text-right">Volume Impact</th>
-                  <th>Recommendation</th>
+                  <th className="px-6 py-4 text-left font-semibold text-violet-300 uppercase tracking-wider">Scenario</th>
+                  <th className="px-6 py-4 text-left font-semibold text-violet-300 uppercase tracking-wider">Product</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Price Change</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Revenue</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Profit</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Volume</th>
+                  <th className="px-6 py-4 text-left font-semibold text-violet-300 uppercase tracking-wider">Recommendation</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-white/5">
                 {scenarios.map((scenario) => (
-                  <tr 
+                  <tr
                     key={scenario.id}
-                    className={selectedScenarios.includes(scenario.id) ? 'bg-blue-50 dark:bg-slate-800' : ''}
+                    className={`hover:bg-white/5 transition-colors ${selectedScenarios.includes(scenario.id) ? 'bg-violet-500/10' : ''}`}
                   >
-                    <td>
+                    <td className="px-4 py-4">
                       <input
                         type="checkbox"
                         checked={selectedScenarios.includes(scenario.id)}
@@ -219,49 +283,42 @@ function Scenarios() {
                         className="rounded"
                       />
                     </td>
-                    <td className="font-medium">{scenario.name}</td>
-                    <td>{scenario.product_name}</td>
-                    <td className={`text-right font-bold ${
-                      scenario.pricing.price_change_percent >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {scenario.pricing.price_change_percent >= 0 ? '+' : ''}
-                      {scenario.pricing.price_change_percent.toFixed(1)}%
-                      <div className="text-xs text-slate-600 dark:text-slate-400 font-normal">
+                    <td className="px-6 py-4">
+                      <span className="font-semibold text-white">{scenario.name}</span>
+                    </td>
+                    <td className="px-6 py-4 text-slate-300">{scenario.product_name}</td>
+                    <td className="px-6 py-4 text-right">
+                      <div className={`font-bold ${scenario.pricing.price_change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {scenario.pricing.price_change_percent >= 0 ? '+' : ''}{scenario.pricing.price_change_percent.toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-slate-500">
                         ${scenario.pricing.current_price.toFixed(2)} → ${scenario.pricing.new_price.toFixed(2)}
                       </div>
                     </td>
-                    <td className={`text-right font-bold ${
-                      scenario.revenue.revenue_change_percent >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {scenario.revenue.revenue_change_percent >= 0 ? '+' : ''}
-                      {scenario.revenue.revenue_change_percent.toFixed(1)}%
-                      <div className="text-xs text-slate-600 dark:text-slate-400 font-normal">
+                    <td className="px-6 py-4 text-right">
+                      <div className={`font-bold ${scenario.revenue.revenue_change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {scenario.revenue.revenue_change_percent >= 0 ? '+' : ''}{scenario.revenue.revenue_change_percent.toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-slate-500">
                         ${scenario.revenue.total_revenue_change.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </div>
                     </td>
-                    <td className={`text-right font-bold ${
-                      scenario.profit.profit_change_percent >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {scenario.profit.profit_change_percent >= 0 ? '+' : ''}
-                      {scenario.profit.profit_change_percent.toFixed(1)}%
-                      <div className="text-xs text-slate-600 dark:text-slate-400 font-normal">
+                    <td className="px-6 py-4 text-right">
+                      <div className={`font-bold ${scenario.profit.profit_change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {scenario.profit.profit_change_percent >= 0 ? '+' : ''}{scenario.profit.profit_change_percent.toFixed(1)}%
+                      </div>
+                      <div className="text-xs text-slate-500">
                         ${scenario.profit.total_profit_change.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </div>
                     </td>
-                    <td className={`text-right font-bold ${
-                      scenario.demand.quantity_change_percent >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {scenario.demand.quantity_change_percent >= 0 ? '+' : ''}
-                      {scenario.demand.quantity_change_percent.toFixed(1)}%
+                    <td className="px-6 py-4 text-right">
+                      <div className={`font-bold ${scenario.demand.quantity_change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {scenario.demand.quantity_change_percent >= 0 ? '+' : ''}{scenario.demand.quantity_change_percent.toFixed(1)}%
+                      </div>
                     </td>
-                    <td>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        scenario.recommendation?.action === 'Highly Recommended' ? 'bg-green-100 text-green-700' :
-                        scenario.recommendation?.action === 'Recommended' ? 'bg-blue-100 text-blue-700' :
-                        scenario.recommendation?.action === 'Consider' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {scenario.recommendation?.action || 'N/A'}
+                    <td className="px-6 py-4">
+                      <span className={`badge ${getRecommendationColor(scenario.recommendation?.action)}`}>
+                        {scenario.recommendation?.action || 'Monitor'}
                       </span>
                     </td>
                   </tr>
