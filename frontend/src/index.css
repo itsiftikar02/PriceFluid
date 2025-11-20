@@ -281,4 +281,50 @@
   .grid-item:hover::after {
     opacity: 1;
   }
+
+  /* Select/Dropdown styling */
+  select.input {
+    @apply appearance-none cursor-pointer pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+  }
+
+  select.input option {
+    @apply bg-slate-800 text-slate-100;
+    color-scheme: dark;
+  }
+
+  select.input option:checked {
+    @apply bg-violet-600 text-white;
+    background: linear-gradient(#667eea, #764ba2);
+  }
+
+  select.input option:hover {
+    @apply bg-slate-700;
+  }
+
+  /* Checkbox styling */
+  input[type="checkbox"] {
+    @apply w-5 h-5 rounded accent-violet-600 cursor-pointer;
+    appearance: none;
+    @apply bg-slate-700 border border-slate-600 relative;
+    @apply transition-all duration-200;
+  }
+
+  input[type="checkbox"]:checked {
+    @apply bg-violet-600 border-violet-600;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='white' d='M13.5 2L5.5 12L2.5 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 12px;
+  }
+
+  input[type="checkbox"]:hover {
+    @apply border-violet-500;
+  }
+
+  input[type="checkbox"]:focus {
+    @apply outline-none ring-2 ring-violet-500/50;
+  }
 }
