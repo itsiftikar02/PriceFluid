@@ -15,7 +15,8 @@ import {
   DollarSign,
   Package,
   Calculator,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import {
   LineChart,
@@ -29,6 +30,48 @@ import {
   ReferenceLine
 } from 'recharts';
 
+// Error Boundary for catching rendering errors
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ProductDetail render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="space-y-8">
+          <div className="flex items-start justify-between gap-4">
+            <Link to="/products" className="btn btn-secondary">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="card bg-red-950/20 border border-red-500/30 p-6">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="h-6 w-6 text-red-400 flex-shrink-0 mt-1" />
+              <div>
+                <p className="text-red-400 font-semibold">Error loading product details</p>
+                <p className="text-red-300 text-sm mt-1">{this.state.error?.message}</p>
+                <Link to="/products" className="btn btn-secondary mt-4">Back to Products</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function ProductDetail() {
   const { id } = useParams();
   const [calculating, setCalculating] = useState(false);
@@ -38,37 +81,66 @@ function ProductDetail() {
   const { data: product, isLoading: productLoading, error: productError } = useQuery(
     ['product', id],
     () => getProduct(id).then(res => res.data),
-    { retry: false }
+    { 
+      retry: 2,
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+      staleTime: 5 * 60 * 1000 // Cache for 5 minutes
+    }
   );
 
   const { data: salesSummary, error: salesError } = useQuery(
     ['sales-summary', id],
     () => getSalesSummary({ product_id: id, days: 90 }).then(res => res.data),
-    { enabled: !!id, retry: false }
+    { 
+      enabled: !!id, 
+      retry: 2,
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+      staleTime: 5 * 60 * 1000 // Cache for 5 minutes
+    }
   );
 
-  const { data: elasticity, refetch: refetchElasticity, error: elasticityError } = useQuery(
+  const { data: elasticity, refetch: refetchElasticity, error: elasticityError, isLoading: elasticityLoading } = useQuery(
     ['elasticity', id],
     () => getProductElasticity(id).then(res => res.data).catch(err => {
       // If 404, return null instead of throwing
       if (err.response?.status === 404) {
         return null;
       }
-      throw err;
+      // Log error but return null to prevent crash
+      console.error('Elasticity error:', err);
+      return null;
     }),
-    { enabled: !!product, retry: false }
+    { 
+      enabled: !!product && !!id, 
+      retry: 1,
+      retryDelay: 500,
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      onError: (err) => {
+        console.error('Elasticity query error:', err);
+      }
+    }
   );
 
-  const { data: curveData, error: curveError } = useQuery(
+  const { data: curveData, error: curveError, isLoading: curveLoading } = useQuery(
     ['elasticity-curve', id],
     () => getElasticityCurve(id).then(res => res.data).catch(err => {
       // If 404 or no elasticity, return null instead of throwing
       if (err.response?.status === 404) {
         return null;
       }
-      throw err;
+      // Log error but return null to prevent crash
+      console.error('Curve error:', err);
+      return null;
     }),
-    { enabled: !!elasticity, retry: false }
+    { 
+      enabled: !!elasticity && !!id && elasticity !== null, 
+      retry: 1,
+      retryDelay: 500,
+      staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      onError: (err) => {
+        console.error('Curve query error:', err);
+      }
+    }
   );
 
   // Move handlers up here (before early returns cause issues)
@@ -117,31 +189,52 @@ function ProductDetail() {
     }
   };
 
-  // Error handling for all queries
+  // Log errors for debugging but don't crash the page
+  React.useEffect(() => {
+    if (productError) {
+      console.error('Product API error:', productError);
+    }
+    if (salesError) {
+      console.error('Sales summary API error:', salesError);
+    }
+  }, [productError, salesError]);
+
   if (productError) {
     console.error('Product API error:', productError);
-    return <div className="card text-red-600">Error loading product: {productError.message}</div>;
-  }
-  if (salesError) {
-    console.error('Sales summary API error:', salesError);
-  }
-  if (elasticityError && elasticityError.response?.status !== 404) {
-    console.error('Elasticity API error:', elasticityError);
-  }
-  if (curveError && curveError.response?.status !== 404) {
-    console.error('Elasticity curve API error:', curveError);
+    return (
+      <div className="space-y-8">
+        <div className="flex items-start justify-between gap-4">
+          <Link to="/products" className="btn btn-secondary">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </div>
+        <div className="card bg-red-950/20 border border-red-500/30 p-6">
+          <p className="text-red-400">Error loading product: {productError.message}</p>
+          <Link to="/products" className="btn btn-secondary mt-4">Back to Products</Link>
+        </div>
+      </div>
+    );
   }
 
   if (productLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="h-8 w-8 animate-spin text-primary-600" />
+        <RefreshCw className="h-8 w-8 animate-spin text-violet-600" />
       </div>
     );
   }
 
   if (!product) {
-    return <div className="card">Product not found</div>;
+    return (
+      <div className="space-y-8">
+        <div className="flex items-start justify-between gap-4">
+          <Link to="/products" className="btn btn-secondary">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </div>
+        <div className="card">Product not found</div>
+      </div>
+    );
   }
 
   // Defensive: fallback values for product fields
@@ -227,8 +320,8 @@ function ProductDetail() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">Current Price</p>
-              <p className="text-3xl font-bold text-white mb-1">${safeProduct.current_price}</p>
-              <p className="text-sm text-slate-400">Cost: ${safeProduct.unit_cost}</p>
+              <p className="text-3xl font-bold text-white mb-1">${(safeProduct.current_price ?? 0).toFixed(2)}</p>
+              <p className="text-sm text-slate-400">Cost: ${(safeProduct.unit_cost ?? 0).toFixed(2)}</p>
             </div>
             <DollarSign className="h-8 w-8 text-violet-400/50" />
           </div>
@@ -238,8 +331,8 @@ function ProductDetail() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">Profit Margin</p>
-              <p className="text-3xl font-bold text-emerald-400 mb-1">{safeProduct.margin}%</p>
-              <p className="text-sm text-slate-400">${(safeProduct.current_price - safeProduct.unit_cost).toFixed(2)} per unit</p>
+              <p className="text-3xl font-bold text-emerald-400 mb-1">{(safeProduct.margin ?? 0).toFixed(1)}%</p>
+              <p className="text-sm text-slate-400">${((safeProduct.current_price ?? 0) - (safeProduct.unit_cost ?? 0)).toFixed(2)} per unit</p>
             </div>
             <TrendingUp className="h-8 w-8 text-emerald-400/50" />
           </div>
@@ -249,8 +342,8 @@ function ProductDetail() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">Total Sales (90d)</p>
-              <p className="text-3xl font-bold text-blue-400 mb-1">{safeSalesSummary.total_quantity?.toLocaleString() || 0}</p>
-              <p className="text-sm text-slate-400">{safeSalesSummary.total_transactions || 0} transactions</p>
+              <p className="text-3xl font-bold text-blue-400 mb-1">{(safeSalesSummary.total_quantity ?? 0).toLocaleString()}</p>
+              <p className="text-sm text-slate-400">{(safeSalesSummary.total_transactions ?? 0).toLocaleString()} transactions</p>
             </div>
             <Package className="h-8 w-8 text-blue-400/50" />
           </div>
@@ -260,8 +353,8 @@ function ProductDetail() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">Revenue (90d)</p>
-              <p className="text-3xl font-bold text-cyan-400 mb-1">${safeSalesSummary.total_revenue?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</p>
-              <p className="text-sm text-slate-400">Profit: ${safeSalesSummary.total_profit?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</p>
+              <p className="text-3xl font-bold text-cyan-400 mb-1">${(safeSalesSummary.total_revenue ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+              <p className="text-sm text-slate-400">Profit: ${(safeSalesSummary.total_profit ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
             </div>
           </div>
         </div>
@@ -297,24 +390,24 @@ function ProductDetail() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white/5 border border-white/10 rounded-lg p-4">
                 <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Coefficient</p>
-                <p className="text-3xl font-bold text-violet-400 mb-1">{safeElasticity.elasticity_coefficient?.toFixed(3)}</p>
-                <span className="badge text-xs">{safeElasticity.elasticity_type}</span>
+                <p className="text-3xl font-bold text-violet-400 mb-1">{((safeElasticity.elasticity_coefficient ?? 0) * 1).toFixed(3)}</p>
+                <span className="badge text-xs">{safeElasticity.elasticity_type || 'N/A'}</span>
               </div>
               
               <div className="bg-white/5 border border-white/10 rounded-lg p-4">
                 <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Optimal Price</p>
                 <p className="text-3xl font-bold text-emerald-400 mb-1">
-                  ${safeElasticity.optimal_price ? safeElasticity.optimal_price.toFixed(2) : safeProduct.current_price.toFixed(2)}
+                  ${((safeElasticity.optimal_price ?? safeProduct.current_price ?? 0) * 1).toFixed(2)}
                 </p>
                 <p className="text-sm text-slate-400">
-                  {safeElasticity.optimal_price ? ((safeElasticity.optimal_price - safeProduct.current_price) / safeProduct.current_price * 100).toFixed(1) : '0'}% change
+                  {safeElasticity.optimal_price ? (((safeElasticity.optimal_price - (safeProduct.current_price ?? 0)) / (safeProduct.current_price ?? 1) * 100) || 0).toFixed(1) : '0'}% change
                 </p>
               </div>
 
               <div className="bg-white/5 border border-white/10 rounded-lg p-4">
                 <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Revenue Impact</p>
-                <p className={`text-3xl font-bold mb-1 ${(safeElasticity.expected_revenue_change ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {(safeElasticity.expected_revenue_change ?? 0) >= 0 ? '+' : ''}{(safeElasticity.expected_revenue_change ?? 0).toFixed(1)}%
+                <p className={`text-3xl font-bold mb-1 ${((safeElasticity.expected_revenue_change ?? 0) * 1) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {((safeElasticity.expected_revenue_change ?? 0) * 1) >= 0 ? '+' : ''}{(((safeElasticity.expected_revenue_change ?? 0) * 1) || 0).toFixed(1)}%
                 </p>
                 <p className="text-sm text-slate-400">{safeElasticity.recommended_action || 'Monitor'}</p>
               </div>
@@ -324,58 +417,56 @@ function ProductDetail() {
             {chartData.length > 0 && (
               <div className="bg-white/5 border border-white/10 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-4">Demand Curve Analysis</h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
-                    <XAxis 
-                      dataKey="price" 
-                      stroke="#94a3b8"
-                      label={{ value: 'Price ($)', position: 'insideBottom', offset: -5, fill: '#94a3b8' }}
-                      style={{ fontSize: '12px' }}
-                    />
-                    <YAxis 
-                      yAxisId="left"
-                      stroke="#94a3b8"
-                      label={{ value: 'Quantity', angle: -90, position: 'insideLeft', fill: '#94a3b8' }}
-                      style={{ fontSize: '12px' }}
-                    />
-                    <YAxis 
-                      yAxisId="right" 
-                      orientation="right"
-                      stroke="#94a3b8"
-                      label={{ value: 'Revenue ($)', angle: 90, position: 'insideRight', fill: '#94a3b8' }}
-                      style={{ fontSize: '12px' }}
-                    />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '12px', color: '#f1f5f9' }}
-                    />
-                    <Legend wrapperStyle={{ color: '#94a3b8' }} />
-                    <ReferenceLine
-                      x={safeProduct.current_price.toFixed(2)}
-                      stroke="#a855f7"
-                      strokeDasharray="5 5"
-                      label={{ value: 'Current Price', fill: '#a855f7', offset: 10 }}
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="quantity"
-                      stroke="#3b82f6"
-                      strokeWidth={2}
-                      name="Demand"
-                      dot={false}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                      name="Revenue"
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <div style={{ width: '100%', height: 350 }}>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+                      <XAxis 
+                        dataKey="price" 
+                        stroke="#94a3b8"
+                        label={{ value: 'Price ($)', position: 'bottom', offset: 0, fill: '#94a3b8' }}
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis 
+                        yAxisId="left"
+                        stroke="#94a3b8"
+                        label={{ value: 'Quantity', angle: -90, position: 'insideLeft', offset: 10, fill: '#94a3b8' }}
+                        style={{ fontSize: '12px' }}
+                      />
+                      <YAxis 
+                        yAxisId="right" 
+                        orientation="right"
+                        stroke="#94a3b8"
+                        label={{ value: 'Revenue ($)', angle: 90, position: 'insideRight', offset: 10, fill: '#94a3b8' }}
+                        style={{ fontSize: '12px' }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '12px', color: '#f1f5f9' }}
+                      />
+                      <Legend wrapperStyle={{ color: '#94a3b8', paddingTop: '20px' }} />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="quantity"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        name="Demand"
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="revenue"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        name="Revenue"
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             )}
           </div>
@@ -404,7 +495,7 @@ function ProductDetail() {
               type="number"
               value={simulationPrice}
               onChange={(e) => setSimulationPrice(e.target.value)}
-              placeholder={`Current: $${safeProduct.current_price}`}
+              placeholder={`Current: $${(safeProduct.current_price ?? 0).toFixed(2)}`}
               step="0.01"
               min="0"
               className="input w-full"
@@ -428,31 +519,31 @@ function ProductDetail() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white/5 rounded-lg p-4">
                 <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Revenue Change</p>
-                <p className={`text-2xl font-bold mb-1 ${simulationResult.revenue.revenue_change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {simulationResult.revenue.revenue_change_percent >= 0 ? '+' : ''}{simulationResult.revenue.revenue_change_percent.toFixed(1)}%
+                <p className={`text-2xl font-bold mb-1 ${((simulationResult.revenue?.revenue_change_percent ?? 0) * 1) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {((simulationResult.revenue?.revenue_change_percent ?? 0) * 1) >= 0 ? '+' : ''}{(((simulationResult.revenue?.revenue_change_percent ?? 0) * 1) || 0).toFixed(1)}%
                 </p>
                 <p className="text-sm text-slate-400">
-                  ${simulationResult.revenue.total_revenue_change.toLocaleString()}
+                  ${((simulationResult.revenue?.total_revenue_change ?? 0) * 1).toLocaleString()}
                 </p>
               </div>
 
               <div className="bg-white/5 rounded-lg p-4">
                 <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Profit Change</p>
-                <p className={`text-2xl font-bold mb-1 ${simulationResult.profit.profit_change_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {simulationResult.profit.profit_change_percent >= 0 ? '+' : ''}{simulationResult.profit.profit_change_percent.toFixed(1)}%
+                <p className={`text-2xl font-bold mb-1 ${((simulationResult.profit?.profit_change_percent ?? 0) * 1) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {((simulationResult.profit?.profit_change_percent ?? 0) * 1) >= 0 ? '+' : ''}{(((simulationResult.profit?.profit_change_percent ?? 0) * 1) || 0).toFixed(1)}%
                 </p>
                 <p className="text-sm text-slate-400">
-                  ${simulationResult.profit.total_profit_change.toLocaleString()}
+                  ${((simulationResult.profit?.total_profit_change ?? 0) * 1).toLocaleString()}
                 </p>
               </div>
 
               <div className="bg-white/5 rounded-lg p-4">
                 <p className="text-sm text-slate-400 uppercase tracking-wider mb-2">Recommendation</p>
                 <p className="text-lg font-bold text-violet-400 mb-1">
-                  {simulationResult.recommendation.action}
+                  {simulationResult.recommendation?.action || 'N/A'}
                 </p>
                 <p className="text-sm text-slate-400">
-                  {simulationResult.recommendation.risk_level} risk
+                  {simulationResult.recommendation?.risk_level || 'N/A'} risk
                 </p>
               </div>
             </div>
@@ -469,4 +560,10 @@ function ProductDetail() {
   );
 }
 
-export default ProductDetail;
+export default function ProductDetailWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <ProductDetail />
+    </ErrorBoundary>
+  );
+}
