@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery } from 'react-query';
 import { getProducts, bulkCalculateElasticity } from '../services/api';
-import { Calculator, TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react';
+import { Calculator, TrendingUp, TrendingDown, Minus, RefreshCw, ChevronRight, Zap, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 function Elasticity() {
   const [calculating, setCalculating] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [filterType, setFilterType] = useState('');
 
   const { data: productsData, refetch } = useQuery(
     ['products-with-elasticity'],
@@ -22,24 +23,12 @@ function Elasticity() {
 
     setCalculating(true);
     try {
-      console.log('🚀 Starting bulk elasticity calculation for', products.length, 'products');
       const result = await bulkCalculateElasticity({});
-      console.log('✅ Bulk calculation complete:', {
-        total_calculated: result.data.total_calculated,
-        total_errors: result.data.total_errors,
-        response: result.data
-      });
       setProgress(result.data);
       alert(`Calculation complete! ${result.data.total_calculated} products analyzed, ${result.data.total_errors} errors`);
       await refetch();
     } catch (error) {
       const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-      console.error('❌ Bulk calculation error:', {
-        message: errorMessage,
-        status: error.response?.status,
-        response: error.response?.data,
-        fullError: error
-      });
       alert('Bulk calculation failed: ' + errorMessage);
     } finally {
       setCalculating(false);
@@ -50,47 +39,62 @@ function Elasticity() {
     switch (type) {
       case 'elastic':
       case 'highly_elastic':
-        return <TrendingDown className="h-5 w-5 text-red-500" />;
+        return <TrendingDown className="h-5 w-5 text-red-400" />;
       case 'inelastic':
-        return <TrendingUp className="h-5 w-5 text-green-500" />;
+        return <TrendingUp className="h-5 w-5 text-emerald-400" />;
       case 'unit_elastic':
-        return <Minus className="h-5 w-5 text-yellow-500" />;
+        return <Minus className="h-5 w-5 text-amber-400" />;
       default:
         return null;
     }
   };
 
-  const getElasticityColor = (coefficient) => {
-    const abs = Math.abs(coefficient);
-    if (abs > 1.5) return 'text-red-600';
-    if (abs > 1) return 'text-orange-600';
-    if (abs >= 0.9) return 'text-yellow-600';
-    return 'text-green-600';
+  const getElasticityBadgeColor = (type) => {
+    switch (type) {
+      case 'elastic':
+      case 'highly_elastic':
+        return 'badge-danger';
+      case 'inelastic':
+        return 'badge-success';
+      case 'unit_elastic':
+        return 'badge-warning';
+      default:
+        return 'badge';
+    }
   };
 
   const elasticProducts = products.filter(p => p.elasticity);
-  const inelasticCount = elasticProducts.filter(p => 
-    p.elasticity?.elasticity_type === 'inelastic'
-  ).length;
-  const elasticCount = elasticProducts.filter(p => 
-    ['elastic', 'highly_elastic'].includes(p.elasticity?.elasticity_type)
-  ).length;
-  const unitElasticCount = elasticProducts.filter(p => 
-    p.elasticity?.elasticity_type === 'unit_elastic'
-  ).length;
+  const filteredProducts = filterType ? elasticProducts.filter(p => p.elasticity?.elasticity_type === filterType) : elasticProducts;
+  
+  const inelasticCount = elasticProducts.filter(p => p.elasticity?.elasticity_type === 'inelastic').length;
+  const elasticCount = elasticProducts.filter(p => ['elastic', 'highly_elastic'].includes(p.elasticity?.elasticity_type)).length;
+  const unitElasticCount = elasticProducts.filter(p => p.elasticity?.elasticity_type === 'unit_elastic').length;
+
+  const StatSummaryCard = ({ title, count, description, color, icon: Icon }) => (
+    <div className={`stat-card bg-gradient-to-br ${color}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-2">{title}</p>
+          <p className="text-4xl font-bold text-white mb-1">{count}</p>
+          <p className="text-xs text-slate-400">{description}</p>
+        </div>
+        <Icon className="h-8 w-8 text-white/20" />
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Product Elasticity Analysis</h1>
-          <p className="text-slate-600 dark:text-slate-400 mt-1">Analyze demand sensitivity to price changes</p>
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">Elasticity Analysis</h1>
+          <p className="text-slate-400 text-lg">Analyze price sensitivity and demand elasticity across products</p>
         </div>
         <button
           onClick={handleBulkCalculate}
           disabled={calculating}
-          className="btn btn-primary flex items-center gap-2"
+          className="btn btn-primary flex items-center justify-center gap-2 whitespace-nowrap"
         >
           {calculating ? (
             <RefreshCw className="h-4 w-4 animate-spin" />
@@ -102,161 +106,218 @@ function Elasticity() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Products Analyzed</p>
-          <p className="text-3xl font-bold text-slate-900 dark:text-blue-400 mt-2">{elasticProducts.length}</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">of {products.length} total</p>
-        </div>
-        <div className="card bg-gradient-to-br from-green-50 to-emerald-50 dark:from-slate-800 dark:to-slate-700">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Inelastic</p>
-          <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{inelasticCount}</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Price insensitive</p>
-        </div>
-        <div className="card bg-gradient-to-br from-red-50 to-rose-50 dark:from-slate-800 dark:to-slate-700">
-          <p className="text-sm text-slate-600">Elastic</p>
-          <p className="text-3xl font-bold text-red-600 mt-2">{elasticCount}</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Price sensitive</p>
-        </div>
-        <div className="card bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-slate-800 dark:to-slate-700">
-          <p className="text-sm text-slate-600">Unit Elastic</p>
-          <p className="text-3xl font-bold text-yellow-600 mt-2">{unitElasticCount}</p>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Balanced</p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatSummaryCard
+          title="Total Analyzed"
+          count={elasticProducts.length}
+          description={`of ${products.length} products`}
+          color="from-violet-600/20 to-violet-400/5 border border-violet-500/30"
+          icon={Zap}
+        />
+        <StatSummaryCard
+          title="Inelastic"
+          count={inelasticCount}
+          description="Price insensitive"
+          color="from-emerald-600/20 to-emerald-400/5 border border-emerald-500/30"
+          icon={TrendingUp}
+        />
+        <StatSummaryCard
+          title="Elastic"
+          count={elasticCount}
+          description="Price sensitive"
+          color="from-red-600/20 to-red-400/5 border border-red-500/30"
+          icon={TrendingDown}
+        />
+        <StatSummaryCard
+          title="Unit Elastic"
+          count={unitElasticCount}
+          description="Balanced demand"
+          color="from-amber-600/20 to-amber-400/5 border border-amber-500/30"
+          icon={Minus}
+        />
       </div>
 
-      {/* Progress */}
+      {/* Progress Card */}
       {progress && (
-        <div className="card bg-gradient-to-br from-blue-50 to-primary-50 dark:from-slate-800 dark:to-slate-700">
-          <h3 className="font-semibold text-slate-900 mb-2">Calculation Results</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-slate-600">Successful:</span>
-              <span className="ml-2 font-medium text-green-600">{progress.total_calculated}</span>
+        <div className="card border-l-4 border-l-violet-500">
+          <div className="flex items-start gap-4">
+            <div className="p-2 bg-violet-500/20 rounded-lg">
+              <Zap className="h-6 w-6 text-violet-400" />
             </div>
-            <div>
-              <span className="text-slate-600">Errors:</span>
-              <span className="ml-2 font-medium text-red-600">{progress.total_errors}</span>
+            <div className="flex-1">
+              <h3 className="font-semibold text-white mb-2">Latest Calculation Results</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/5 rounded-lg p-3">
+                  <p className="text-xs text-slate-400 uppercase tracking-wider">Calculated</p>
+                  <p className="text-2xl font-bold text-emerald-400 mt-1">{progress.total_calculated}</p>
+                </div>
+                <div className="bg-white/5 rounded-lg p-3">
+                  <p className="text-xs text-slate-400 uppercase tracking-wider">Errors</p>
+                  <p className="text-2xl font-bold text-red-400 mt-1">{progress.total_errors}</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Products Table */}
+      {/* Filter and Products Table */}
       <div className="card">
-  <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Product Elasticity Analysis</h2>
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Category</th>
-                <th>Price</th>
-                <th className="text-center">Type</th>
-                <th className="text-right">Coefficient</th>
-                <th className="text-right">R²</th>
-                <th className="text-right">Optimal Price</th>
-                <th className="text-right">Revenue Impact</th>
-                <th>Action</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {elasticProducts.length === 0 ? (
+        <div className="mb-6 pb-6 border-b border-white/10">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
+            <TrendingUp className="h-5 w-5 text-violet-400" />
+            Product Elasticity Breakdown
+          </h2>
+          
+          {/* Filter Buttons */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setFilterType('')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                filterType === ''
+                  ? 'bg-violet-600 text-white shadow-lg'
+                  : 'bg-white/10 text-slate-300 hover:bg-white/20'
+              }`}
+            >
+              All ({elasticProducts.length})
+            </button>
+            <button
+              onClick={() => setFilterType('inelastic')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                filterType === 'inelastic'
+                  ? 'bg-emerald-600 text-white shadow-lg'
+                  : 'bg-white/10 text-slate-300 hover:bg-white/20'
+              }`}
+            >
+              <TrendingUp className="h-4 w-4" />
+              Inelastic ({inelasticCount})
+            </button>
+            <button
+              onClick={() => setFilterType('elastic')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                filterType === 'elastic'
+                  ? 'bg-red-600 text-white shadow-lg'
+                  : 'bg-white/10 text-slate-300 hover:bg-white/20'
+              }`}
+            >
+              <TrendingDown className="h-4 w-4" />
+              Elastic ({elasticCount})
+            </button>
+            <button
+              onClick={() => setFilterType('unit_elastic')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                filterType === 'unit_elastic'
+                  ? 'bg-amber-600 text-white shadow-lg'
+                  : 'bg-white/10 text-slate-300 hover:bg-white/20'
+              }`}
+            >
+              <Minus className="h-4 w-4" />
+              Unit ({unitElasticCount})
+            </button>
+          </div>
+        </div>
+
+        {/* Products Table */}
+        {filteredProducts.length === 0 ? (
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-slate-600 mx-auto mb-4" />
+            <p className="text-slate-400 text-lg">No elasticity data available</p>
+            <p className="text-slate-500 mt-1">Click "Calculate All" to analyze products</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gradient-to-r from-violet-600/20 to-blue-600/20 border-b border-white/10">
                 <tr>
-                  <td colSpan="10" className="text-center py-8 text-slate-600 dark:text-slate-400">
-                    No elasticity data available. Click "Calculate All" to analyze products.
-                  </td>
+                  <th className="px-6 py-4 text-left font-semibold text-violet-300 uppercase tracking-wider">Product</th>
+                  <th className="px-6 py-4 text-left font-semibold text-violet-300 uppercase tracking-wider">Category</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Price</th>
+                  <th className="px-6 py-4 text-center font-semibold text-violet-300 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Coefficient</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Optimal</th>
+                  <th className="px-6 py-4 text-right font-semibold text-violet-300 uppercase tracking-wider">Impact</th>
+                  <th className="px-6 py-4 text-left font-semibold text-violet-300 uppercase tracking-wider">Action</th>
                 </tr>
-              ) : (
-                elasticProducts.map((product) => {
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {filteredProducts.map((product) => {
                   const elasticity = product.elasticity;
                   return (
-                    <tr key={product.id}>
-                      <td className="font-medium">{product.name}</td>
-                      <td>{product.category}</td>
-                      <td className="font-medium">${product.current_price}</td>
-                      <td className="text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          {getElasticityIcon(elasticity.elasticity_type)}
-                          <span className="text-xs">{elasticity.elasticity_type}</span>
+                    <tr key={product.id} className="hover:bg-white/5 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="font-semibold text-white group-hover:text-violet-300 transition-colors">{product.name}</p>
+                          <p className="text-xs text-slate-500 mt-1">{product.sku}</p>
                         </div>
                       </td>
-                      <td className={`text-right font-bold ${getElasticityColor(elasticity.elasticity_coefficient)}`}>
-                        {elasticity.elasticity_coefficient.toFixed(3)}
-                      </td>
-                      <td className="text-right">
-                        {elasticity.r_squared ? elasticity.r_squared.toFixed(3) : 'N/A'}
-                      </td>
-                      <td className="text-right font-medium text-primary-600">
-                        ${elasticity.optimal_price ? elasticity.optimal_price.toFixed(2) : 'N/A'}
-                      </td>
-                      <td className={`text-right font-medium ${
-                        (elasticity.expected_revenue_change ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {(elasticity.expected_revenue_change ?? 0) >= 0 ? '+' : ''}
-                        {elasticity.expected_revenue_change !== null && elasticity.expected_revenue_change !== undefined ? elasticity.expected_revenue_change.toFixed(1) : 'N/A'}%
-                      </td>
-                      <td>
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 whitespace-nowrap flex flex-row items-center ${
-                            elasticity.recommended_action === 'Decrease Price'
-                              ? 'text-red-600 dark:text-red-300 font-semibold'
-                              : elasticity.recommended_action === 'Increase Price'
-                              ? 'text-green-600 dark:text-green-300 font-semibold'
-                              : 'text-slate-700 dark:text-slate-200'
-                          }`}
-                        >
-                          {elasticity.recommended_action || 'N/A'}
+                      <td className="px-6 py-4 text-slate-300">{product.category}</td>
+                      <td className="px-6 py-4 text-right font-semibold text-slate-200">${product.current_price}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`badge ${getElasticityBadgeColor(elasticity.elasticity_type)}`}>
+                          {elasticity.elasticity_type}
                         </span>
                       </td>
-                      <td>
-                        <Link
-                          to={`/products/${product.id}`}
-                          className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                        >
-                          Details →
-                        </Link>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {getElasticityIcon(elasticity.elasticity_type)}
+                          <span className="font-mono font-bold">{elasticity.elasticity_coefficient.toFixed(3)}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-violet-300">
+                        ${elasticity.optimal_price ? elasticity.optimal_price.toFixed(2) : 'N/A'}
+                      </td>
+                      <td className={`px-6 py-4 text-right font-bold ${
+                        (elasticity.expected_revenue_change ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        {(elasticity.expected_revenue_change ?? 0) >= 0 ? '+' : ''}
+                        {elasticity.expected_revenue_change !== null ? elasticity.expected_revenue_change.toFixed(1) : 'N/A'}%
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-slate-300">
+                            {elasticity.recommended_action || 'Monitor'}
+                          </span>
+                          <Link
+                            to={`/products/${product.id}`}
+                            className="text-violet-400 hover:text-violet-300 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Explanation */}
-      <div className="card bg-gradient-to-br from-blue-50 to-primary-50 dark:from-slate-800 dark:to-slate-700">
-  <h3 className="font-semibold text-slate-900 mb-3">Understanding Price Elasticity</h3>
-        <div className="space-y-2 text-sm text-slate-700">
-          <p>
-            <strong>Elasticity Coefficient:</strong> Measures % change in quantity demanded per 1% change in price
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
-            <div className="bg-white dark:bg-slate-700 p-3 rounded shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="h-4 w-4 text-green-600" />
-                <strong className="text-green-600 dark:text-green-400">Inelastic (|e| &lt; 1)</strong>
-              </div>
-              <p className="text-xs dark:text-slate-300">Demand insensitive to price. Increase prices to boost revenue.</p>
-            </div>
-            <div className="bg-white dark:bg-slate-700 p-3 rounded shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingDown className="h-4 w-4 text-red-600" />
-                <strong className="text-red-600 dark:text-red-400">Elastic (|e| &gt; 1)</strong>
-              </div>
-              <p className="text-xs dark:text-slate-300">Demand sensitive to price. Lower prices to increase volume and revenue.</p>
-            </div>
-            <div className="bg-white dark:bg-slate-700 p-3 rounded shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <Minus className="h-4 w-4 text-yellow-600" />
-                <strong className="text-yellow-600 dark:text-yellow-400">Unit Elastic (|e| ≈ 1)</strong>
-              </div>
-              <p className="text-xs dark:text-slate-300">Revenue unchanged by price changes. Focus on volume or margins.</p>
-            </div>
+      {/* Understanding Elasticity Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="card border-l-4 border-l-emerald-500">
+          <div className="flex items-start gap-3 mb-4">
+            <TrendingUp className="h-6 w-6 text-emerald-400 flex-shrink-0" />
+            <h3 className="font-bold text-white">Inelastic (|e| &lt; 1)</h3>
           </div>
+          <p className="text-slate-300 text-sm">Demand is insensitive to price changes. Customers buy regardless of price. Strategy: Increase prices to boost revenue and profit margins.</p>
+        </div>
+
+        <div className="card border-l-4 border-l-red-500">
+          <div className="flex items-start gap-3 mb-4">
+            <TrendingDown className="h-6 w-6 text-red-400 flex-shrink-0" />
+            <h3 className="font-bold text-white">Elastic (|e| &gt; 1)</h3>
+          </div>
+          <p className="text-slate-300 text-sm">Demand is sensitive to price changes. Small price increases reduce sales significantly. Strategy: Consider price reductions to increase volume and revenue.</p>
+        </div>
+
+        <div className="card border-l-4 border-l-amber-500">
+          <div className="flex items-start gap-3 mb-4">
+            <Minus className="h-6 w-6 text-amber-400 flex-shrink-0" />
+            <h3 className="font-bold text-white">Unit Elastic (|e| ≈ 1)</h3>
+          </div>
+          <p className="text-slate-300 text-sm">Revenue impact is neutral to price changes. Quantity sold changes proportionally with price. Strategy: Focus on cost optimization or value-added services.</p>
         </div>
       </div>
     </div>
