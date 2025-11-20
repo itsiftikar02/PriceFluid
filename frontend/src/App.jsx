@@ -14,7 +14,8 @@ import {
   Moon,
   Sun,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  DollarSign
 } from 'lucide-react';
 import { useDarkMode } from './context/DarkModeContext';
 
@@ -56,18 +57,18 @@ function Sidebar() {
           {sidebarOpen && (
             <div className="flex items-center group">
               <div className="relative">
-                <Zap className="h-8 w-8 text-violet-500 group-hover:text-violet-400 transition-colors" />
-                <div className="absolute inset-0 blur-xl bg-violet-500/20 group-hover:bg-violet-600/30 transition-all -z-10"></div>
+                <DollarSign className="h-8 w-8 text-emerald-500 group-hover:text-emerald-400 transition-colors" />
+                <div className="absolute inset-0 blur-xl bg-emerald-500/20 group-hover:bg-emerald-600/30 transition-all -z-10"></div>
               </div>
-              <span className="ml-3 text-xl font-bold bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent">
-                ElasticRev
+              <span className="ml-3 text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                PriceFluid
               </span>
             </div>
           )}
           {!sidebarOpen && (
             <div className="relative">
-              <Zap className="h-8 w-8 text-violet-500 group-hover:text-violet-400 transition-colors mx-auto" />
-              <div className="absolute inset-0 blur-xl bg-violet-500/20 group-hover:bg-violet-600/30 transition-all -z-10"></div>
+              <DollarSign className="h-8 w-8 text-emerald-500 group-hover:text-emerald-400 transition-colors mx-auto" />
+              <div className="absolute inset-0 blur-xl bg-emerald-500/20 group-hover:bg-emerald-600/30 transition-all -z-10"></div>
             </div>
           )}
           <button
@@ -129,11 +130,11 @@ function Sidebar() {
           
           <div className="flex items-center group">
             <div className="relative">
-              <Zap className="h-7 w-7 text-violet-500 group-hover:text-violet-400 transition-colors" />
-              <div className="absolute inset-0 blur-xl bg-violet-500/20 group-hover:bg-violet-600/30 transition-all -z-10"></div>
+              <DollarSign className="h-7 w-7 text-emerald-500 group-hover:text-emerald-400 transition-colors" />
+              <div className="absolute inset-0 blur-xl bg-emerald-500/20 group-hover:bg-emerald-600/30 transition-all -z-10"></div>
             </div>
-            <span className="ml-2 text-lg font-bold bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent">
-              ElasticRev
+            <span className="ml-2 text-lg font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              PriceFluid
             </span>
           </div>
           
